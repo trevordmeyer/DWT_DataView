@@ -14,6 +14,8 @@ import struct
 import time
 import sys
 import os
+import struct   
+import csv
 
 
 
@@ -381,31 +383,18 @@ class mainWidget(QtWidgets.QWidget):
 
 
 
+ 
+
     def unpackData(self, sender, data):
-        # Header size: 2 bytes packet_id + 1 byte flags = 3 bytes
-        header_size = 3
-        if len(data) < header_size:
-            print(f"Packet too short! len(data)={len(data)}")
-            return
-        packet_id, flags = struct.unpack('<HB', data[:header_size])
-        payload = data[header_size:]
-        sample_size = 2  # if COMPRESSION_TYPE is uint16_t
+        # Unpack: int32 num_nnz, float quant, int16 idx, int32 codeword
+        num_nnz, quant, idx, codeword = struct.unpack('<ifhi2x', data)
+        print(f"num_nnz={num_nnz}, quant={quant}, idx={idx}, codeword={codeword}")
 
-        if len(payload) % sample_size != 0:
-            print(f"Warning: payload length ({len(payload)}) not a multiple of sample size ({sample_size})!")
-            return
-        num_samples = len(payload) // sample_size
-        samples = struct.unpack('<' + 'H' * num_samples, payload)
-
-        print(f"packet_id={packet_id}, flags={flags:08b}, num_samples={num_samples}, samples={samples[:4]}...")
-        self.dataToDisplay.append(samples)
-
-        is_start = bool(flags & 0x01)
-        is_end = bool(flags & 0x02)
-        if is_start:
-            print("Start of compressed chunk")
-        if is_end:
-            print("End of compressed chunk")
+        # Write to CSV
+        with open('results.csv', 'a', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow([num_nnz, quant, idx, codeword])
+       
 
     def updatePlot(self):
         if len(self.dataToDisplay) == 0:
