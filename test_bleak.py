@@ -8,8 +8,9 @@ from bleak.exc import BleakError
 
 # === CONFIG: set your target info here ===
 TARGET_NAME = "BionodeWavelet"               # or set to None to match by address
-TARGET_ADDRESS: Optional[str] = None      # e.g. "AA:BB:CC:DD:EE:FF" - takes precedence if set
+TARGET_ADDRESS: Optional[str] = "54:DC:E9:1D:4D:0A"      # e.g. "AA:BB:CC:DD:EE:FF" - takes precedence if set
 SERVICE_UUID = "80ea98d0-bf05-4d48-92e4-f16b33600320"     # replace with your custom service UUID
+
 CHAR_UUID = "91fd3072-5f44-4038-85d7-b807e11b5121"        # replace with your custom characteristic UUID
 RECONNECT_DELAY = 3.0
 

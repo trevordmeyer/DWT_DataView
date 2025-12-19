@@ -21,7 +21,7 @@ class mainWidget(QtWidgets.QWidget):
     def __init__(self, parent=None):
 
 
-        self.bleDevice        = "BionodeWavelet"
+        self.bleDevice        = "BionodeW"
         self.bleServiceUUID   = "80ea98d0-bf05-4d48-92e4-f16b33600320"
         self.bleCharUUID      = "91fd3072-5f44-4038-85d7-b807e11b5121"
         self.num_channels     = 1
@@ -381,10 +381,31 @@ class mainWidget(QtWidgets.QWidget):
 
 
 
-    def unpackData(self, sender, data): # sender: int, data: bytearray
-        # print(f"raw={data.hex()}")
-        self.dataToDisplay.append(struct.unpack("<10L", data))
+    def unpackData(self, sender, data):
+        # Header size: 2 bytes packet_id + 1 byte flags = 3 bytes
+        header_size = 3
+        if len(data) < header_size:
+            print(f"Packet too short! len(data)={len(data)}")
+            return
+        packet_id, flags = struct.unpack('<HB', data[:header_size])
+        payload = data[header_size:]
+        sample_size = 2  # if COMPRESSION_TYPE is uint16_t
 
+        if len(payload) % sample_size != 0:
+            print(f"Warning: payload length ({len(payload)}) not a multiple of sample size ({sample_size})!")
+            return
+        num_samples = len(payload) // sample_size
+        samples = struct.unpack('<' + 'H' * num_samples, payload)
+
+        print(f"packet_id={packet_id}, flags={flags:08b}, num_samples={num_samples}, samples={samples[:4]}...")
+        self.dataToDisplay.append(samples)
+
+        is_start = bool(flags & 0x01)
+        is_end = bool(flags & 0x02)
+        if is_start:
+            print("Start of compressed chunk")
+        if is_end:
+            print("End of compressed chunk")
 
     def updatePlot(self):
         if len(self.dataToDisplay) == 0:
