@@ -389,6 +389,7 @@ class mainWidget(QtWidgets.QWidget):
         # Unpack: int32 num_nnz, float quant, int16 idx, int32 codeword
         num_nnz, quant, idx, codeword = struct.unpack('<ifhi2x', data)
         print(f"num_nnz={num_nnz}, quant={quant}, idx={idx}, codeword={codeword}")
+        self.dataToDisplay.append(np.array([codeword])) # just show the codewords. should be these cool steps
 
         # Write to CSV
         with open('results.csv', 'a', newline='') as csvfile:
