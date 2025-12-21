@@ -400,8 +400,8 @@ class mainWidget(QtWidgets.QWidget):
         
         # packet id HAS to be an int, flags MUST be a byte
         if packet_type == 0x02 and chunk_active:
-            packet_id, flags = struct.unpack('<HB', data[1:4])
-            payload = data[4:]
+            packet_id, flags = struct.unpack('<BB', data[1:3])
+            payload = data[3:]
             entry_size = 4 # uint16 idx, int32 codeword
             num_entries = len(payload) // entry_size
 
