@@ -383,19 +383,52 @@ class mainWidget(QtWidgets.QWidget):
 
 
 
- 
+    quant = None
+    signal_length = None
+    result = None
+    chunk_active = False
 
     def unpackData(self, sender, data):
-        # Unpack: int32 num_nnz, float quant, int16 idx, int32 codeword
-        num_nnz, quant, idx, codeword = struct.unpack('<ifhi2x', data)
-        print(f"num_nnz={num_nnz}, quant={quant}, idx={idx}, codeword={codeword}")
-        self.dataToDisplay.append(np.array([codeword])) # just show the codewords. should be these cool steps
+        global quant, signal_length, result, chunk_active
+        packet_type = data[0]
+        # the quant, signal length MUST be a float, int respectively
+        if packet_type == 0x01:
+            quant, signal_length = struct.unpack('<fi', data[1:9])
+            result = np.zeros(signal_length)
+            chunk_active = True
+            return
+        
+        # packet id HAS to be an int, flags MUST be a byte
+        if packet_type == 0x02 and chunk_active:
+            packet_id, flags = struct.unpack('<HB', data[1:4])
+            payload = data[4:]
+            entry_size = 4 # uint16 idx, int32 codeword
+            num_entries = len(payload) // entry_size
 
-        # Write to CSV
-        with open('results.csv', 'a', newline='') as csvfile:
-            writer = csv.writer(csvfile)
-            writer.writerow([num_nnz, quant, idx, codeword])
+            if flags & 0x01:  # it's a start of a new frame
+                result = np.zeros(signal_length)                
+            
+            for i in range(num_entries):
+                entry = payload[i*entry_size:(i+1)*entry_size]
+                idx, codeword = struct.unpack('<HH', entry)
+                if 0 <= idx < signal_length:
+                    result[idx] = codeword * quant
+
+            if flags & 0x02:  # it's the end of the frame
+                self.dataToDisplay.append(result)
+                # write results to a csv file
+                with open('decompressed_data.csv', 'a', newline='') as file:
+                    writer = csv.writer(file)
+                    writer.writerow(result)
+                chunk_active = False
+            else:
+                if packet_type == 0x02:
+                    print("Warning: Data packet arrived before start packet; skipping.")
+
+
+
        
+        
 
     def updatePlot(self):
         if len(self.dataToDisplay) == 0:
