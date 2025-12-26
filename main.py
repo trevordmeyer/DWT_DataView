@@ -1,3 +1,4 @@
+from unittest import result
 from bottleneck import move_mean, move_median, move_sum
 from scipy.signal import butter, filtfilt, find_peaks
 from scipy.fft import fft, fftfreq
@@ -16,8 +17,7 @@ import sys
 import os
 import struct   
 import csv
-
-
+from pywt import waverec
 
 class mainWidget(QtWidgets.QWidget):
     def __init__(self, parent=None):
@@ -385,16 +385,19 @@ class mainWidget(QtWidgets.QWidget):
 
     quant = None
     signal_length = None
-    result = None
+    sparse_rep = None
     chunk_active = False
+    book_keeping = None
 
     def unpackData(self, sender, data):
-        global quant, signal_length, result, chunk_active
+        global quant, signal_length, sparse_rep, chunk_active, book_keeping
         packet_type = data[0]
         # the quant, signal length MUST be a float, int respectively
         if packet_type == 0x01:
-            quant, signal_length = struct.unpack('<fi', data[1:9])
-            result = np.zeros(signal_length)
+            quant, num_levels = struct.unpack('<fb', data[1:6])
+            book_keeping = struct.unpack('<' + 'i' * num_levels, data[6:6 + 4 * num_levels])
+            signal_length = sum(book_keeping)
+            sparse_rep = np.zeros(signal_length)
             chunk_active = True
             return
         
@@ -402,19 +405,27 @@ class mainWidget(QtWidgets.QWidget):
         if packet_type == 0x02 and chunk_active:
             packet_id, flags = struct.unpack('<BB', data[1:3])
             payload = data[3:]
-            entry_size = 4 # uint16 idx, int32 codeword
+            entry_size = 4 # uint16, int16 BEWARE one is signed!!!
             num_entries = len(payload) // entry_size
 
             if flags & 0x01:  # it's a start of a new frame
-                result = np.zeros(signal_length)                
+                sparse_rep = np.zeros(signal_length)                
             
             for i in range(num_entries):
                 entry = payload[i*entry_size:(i+1)*entry_size]
-                idx, codeword = struct.unpack('<HH', entry)
+                idx, codeword = struct.unpack('<Hh', entry)
                 if 0 <= idx < signal_length:
-                    result[idx] = codeword * quant
+                    sparse_rep[idx] = codeword * quant
 
             if flags & 0x02:  # it's the end of the frame
+                start = 0
+                coefficients = []
+                for size in book_keeping:
+                    coefficients.append(np.array(sparse_rep[start:start+size]))
+                    start += size
+
+                result = waverec(coefficients, 'db4', mode = 'symmetric')
+
                 self.dataToDisplay.append(result)
                 # write results to a csv file
                 with open('decompressed_data.csv', 'a', newline='') as file:
