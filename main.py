@@ -382,12 +382,12 @@ class mainWidget(QtWidgets.QWidget):
 
 
     def unpackData(self, sender, data):
-        # Header size: 2 bytes packet_id + 1 byte flags = 3 bytes
-        header_size = 3
+        # Header size: 1 bytes packet_id + 1 byte flags = 3 bytes
+        header_size = 2
         if len(data) < header_size:
             print(f"Packet too short! len(data)={len(data)}")
             return
-        packet_id, flags = struct.unpack('<HB', data[:header_size])
+        packet_id, flags = struct.unpack('<BB', data[:header_size])
         payload = data[header_size:]
         sample_size = 2  # if COMPRESSION_TYPE is uint16_t
 
