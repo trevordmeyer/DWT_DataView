@@ -399,6 +399,7 @@ class mainWidget(QtWidgets.QWidget):
             signal_length = sum(book_keeping)
             sparse_rep = np.zeros(signal_length)
             chunk_active = True
+            print(f"Received header: quant={quant}, signal_length={signal_length}, book_keeping={book_keeping}")
             return
         
         # packet id HAS to be an int, flags MUST be a byte
@@ -408,8 +409,13 @@ class mainWidget(QtWidgets.QWidget):
             entry_size = 4 # uint16, int16 BEWARE one is signed!!!
             num_entries = len(payload) // entry_size
 
+            print(f"packet_id={packet_id}, flags={flags}, num_entries={num_entries}")
+
+
             if flags & 0x01:  # it's a start of a new frame
-                sparse_rep = np.zeros(signal_length)                
+                sparse_rep = np.zeros(signal_length)    
+                print("Start of compressed chunk")
+            
             
             for i in range(num_entries):
                 entry = payload[i*entry_size:(i+1)*entry_size]
@@ -418,6 +424,7 @@ class mainWidget(QtWidgets.QWidget):
                     sparse_rep[idx] = codeword * quant
 
             if flags & 0x02:  # it's the end of the frame
+                print("End of compressed chunk")
                 start = 0
                 coefficients = []
                 for size in book_keeping:
@@ -432,9 +439,12 @@ class mainWidget(QtWidgets.QWidget):
                     writer = csv.writer(file)
                     writer.writerow(result)
                 chunk_active = False
+
             else:
                 if packet_type == 0x02:
                     print("Warning: Data packet arrived before start packet; skipping.")
+                    print(f"packet_id={packet_id}, flags={flags}, num_entries={num_entries}")
+            return
 
 
 
