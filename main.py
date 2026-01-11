@@ -435,7 +435,7 @@ class mainWidget(QtWidgets.QWidget):
 
                 self.dataToDisplay.append(result)
                 # write results to a csv file
-                with open('decompressed_data.csv', 'a', newline='') as file:
+                with open('decompressed_data_%s.csv' % len(result), 'a', newline='') as file:
                     writer = csv.writer(file)
                     writer.writerow(result)
                 chunk_active = False
