@@ -433,11 +433,12 @@ class mainWidget(QtWidgets.QWidget):
 
                 result = waverec(coefficients, 'db4', mode = 'symmetric')
 
-                self.dataToDisplay.append(result)
                 # write results to a csv file
                 with open('data_%s.csv' % len(result), 'a', newline='') as file:
                     writer = csv.writer(file)
                     writer.writerow(result)
+                self.dataToDisplay.append(result)
+
                 chunk_active = False
 
             else:
