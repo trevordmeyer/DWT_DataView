@@ -1,3 +1,4 @@
+import csv
 from bottleneck import move_mean, move_median, move_sum
 from scipy.signal import butter, filtfilt, find_peaks
 from scipy.fft import fft, fftfreq
@@ -42,6 +43,9 @@ class mainWidget(QtWidgets.QWidget):
         self.recording = False
         self.displayIndex = 0
         self.stopStream = False
+
+        self.current_chunk = []
+
 
         if not(os.path.exists(self.pathSave_default)) and not(os.path.isdir(self.pathSave_default)):
             os.mkdir(self.pathSave_default)
@@ -380,7 +384,6 @@ class mainWidget(QtWidgets.QWidget):
                 await asyncio.sleep(self.reconnectDelay)
 
 
-
     def unpackData(self, sender, data):
         # Header size: 1 bytes packet_id + 1 byte flags = 3 bytes
         header_size = 2
@@ -404,8 +407,19 @@ class mainWidget(QtWidgets.QWidget):
         is_end = bool(flags & 0x02)
         if is_start:
             print("Start of compressed chunk")
+            # Start new accumulation
+            self.current_chunk = []  # reset chunk at start
+
+        self.current_chunk.extend(samples)
+
         if is_end:
             print("End of compressed chunk")
+            # Write the chunk as a new row in CSV
+            with open('data_regular.csv', 'a', newline='') as csvfile:
+                writer = csv.writer(csvfile)
+                writer.writerow(self.current_chunk)
+            # Optionally, reset after writing
+            self.current_chunk = []
 
     def updatePlot(self):
         if len(self.dataToDisplay) == 0:
