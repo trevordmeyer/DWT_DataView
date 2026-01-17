@@ -22,6 +22,15 @@ from pywt import waverec
 class mainWidget(QtWidgets.QWidget):
     def __init__(self, parent=None):
 
+        self.quant = None
+        self.signal_length = None
+        self.sparse_rep = None
+        self.chunk_active = False
+        self.book_keeping = None
+        self.dataToDisplay = []
+        self.entry_leftover = b''
+
+
 
         self.bleDevice        = "BionodeW"
         self.bleServiceUUID   = "80ea98d0-bf05-4d48-92e4-f16b33600320"
@@ -383,68 +392,66 @@ class mainWidget(QtWidgets.QWidget):
 
 
 
-    quant = None
-    signal_length = None
-    sparse_rep = None
-    chunk_active = False
-    book_keeping = None
+
 
     def unpackData(self, sender, data):
-        global quant, signal_length, sparse_rep, chunk_active, book_keeping
         packet_type = data[0]
-        # the quant, signal length MUST be a float, int respectively
         if packet_type == 0x01:
-            quant, num_levels = struct.unpack('<fb', data[1:6])
-            book_keeping = struct.unpack('<' + 'i' * num_levels, data[6:6 + 4 * num_levels])
-            signal_length = sum(book_keeping)
-            sparse_rep = np.zeros(signal_length)
-            chunk_active = True
-            print(f"Received header: quant={quant}, signal_length={signal_length}, book_keeping={book_keeping}")
+            # Now: [float quant][uint8 num_levels][float mean][int32 book_keeping...]
+            self.quant, num_levels, self.mean = struct.unpack('<fbf', data[1:10])
+            self.book_keeping = struct.unpack('<' + 'i' * num_levels, data[10:10 + 4 * num_levels])
+            self.signal_length = sum(self.book_keeping)
+            self.sparse_rep = np.zeros(self.signal_length)
+            self.chunk_active = True
+            self.entry_leftover = b''  # Clear any old partial packet!
+            print(f"Received header: quant={self.quant}, mean={self.mean}, signal_length={self.signal_length}, book_keeping={self.book_keeping}")
             return
-        
-        # packet id HAS to be an int, flags MUST be a byte
-        if packet_type == 0x02 and chunk_active:
+
+        if packet_type == 0x02 and self.chunk_active:
             packet_id, flags = struct.unpack('<BB', data[1:3])
             payload = data[3:]
-            entry_size = 4 # uint16, int16 BEWARE one is signed!!!
-            num_entries = len(payload) // entry_size
+            entry_size = 4 # uint16, int16
+
+            payload = self.entry_leftover + payload
+            total_bytes = len(payload)
+            num_entries = total_bytes // entry_size
 
             print(f"packet_id={packet_id}, flags={flags}, num_entries={num_entries}")
 
-
-            if flags & 0x01:  # it's a start of a new frame
-                sparse_rep = np.zeros(signal_length)    
+            if flags & 0x01:
+                self.sparse_rep = np.zeros(self.signal_length)
                 print("Start of compressed chunk")
-            
-            
-            for i in range(num_entries):
-                entry = payload[i*entry_size:(i+1)*entry_size]
-                idx, codeword = struct.unpack('<Hh', entry)
-                if 0 <= idx < signal_length:
-                    sparse_rep[idx] = codeword * quant
 
-            if flags & 0x02:  # it's the end of the frame
+            for i in range(num_entries):
+                start_idx = i * entry_size
+                end_idx = start_idx + entry_size
+                entry = payload[start_idx:end_idx]
+                idx, codeword = struct.unpack('<Hh', entry)
+                print(f"Entry {i}: idx={idx}, codeword={codeword}")
+                if 0 <= idx < self.signal_length:
+                    self.sparse_rep[idx] = codeword * self.quant
+
+            self.entry_leftover = payload[num_entries * entry_size:]
+
+            if flags & 0x02:
                 print("End of compressed chunk")
                 start = 0
                 coefficients = []
-                for size in book_keeping:
-                    coefficients.append(np.array(sparse_rep[start:start+size]))
+                for size in self.book_keeping:
+                    coefficients.append(np.array(self.sparse_rep[start:start+size]))
                     start += size
 
-                result = waverec(coefficients, 'db4', mode = 'symmetric')
+                result = waverec(coefficients, 'db4', mode='symmetric')
+                # ----- Add back the mean! -----
+                result = result + self.mean
 
-                # write results to a csv file
                 with open('data_%s.csv' % len(result), 'a', newline='') as file:
                     writer = csv.writer(file)
                     writer.writerow(result)
                 self.dataToDisplay.append(result)
+                self.chunk_active = False
 
-                chunk_active = False
-
-            else:
-                if packet_type == 0x02:
-                    print("Warning: Data packet arrived before start packet; skipping.")
-                    print(f"packet_id={packet_id}, flags={flags}, num_entries={num_entries}")
+                self.entry_leftover = b''
             return
 
 
